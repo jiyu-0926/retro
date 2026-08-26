@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2D 레트로 장애물 피하기 게임</title>
+    <style>
+        body {
+            background-color: #1a1a2e;
+            color: #fff;
+            font-family: 'Courier New', Courier, monospace;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+        }
+
+        h1 {
+            color: #e94560;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px #0f3460;
+        }
+
+        .info-panel {
+            display: flex;
+            justify-content: space-between;
+            width: 400px;
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+
+        #gameCanvas {
+            background-color: #16213e;
+            border: 4px solid #0f3460;
+            box-shadow: 0 0 20px rgba(233, 69, 96, 0.4);
+        }
+
+        .controls-info {
+            margin-top: 15px;
+            color: #8d99ae;
+            font-size: 14px;
+        }
+
+        button {
+            margin-top: 15px;
+            padding: 10px 20px;
+            font-size: 16px;
+            font-weight: bold;
+            background-color: #e94560;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            box-shadow: 0 4px #900c3f;
+        }
+
+        button:hover {
+            background-color: #ff6b81;
+        }
+
+        button:active {
+            box-shadow: 0 2px #900c3f;
+            transform: translateY(2px);
+        }
+    </style>
+</head>
+<body>
+
+    <h1>RETRO DODGE</h1>
+    
+    <div class="info-panel">
+        <div>점수: <span id="scoreText">0</span></div>
+        <div>최고 점수: <span id="highScoreText">0</span></div>
+    </div>
+
+    <canvas id="gameCanvas" width="400" height="500"></canvas>
+
+    <div class="controls-info">좌/우 방향키(←, →)를 눌러 운석을 피하세요!</div>
+    <button id="startBtn" onclick="startGame()">게임 시작</button>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+
+    // 게임 상태 변수
+    let gameInterval;
+    let score = 0;
+    let highScore = 0;
+    let isGameOver = false;
+    let isPlaying = false;
+
+    // 플레이어 설정
+    const player = {
+        x: canvas.width / 2 - 15,
+        y: canvas.height - 40,
+        width: 30,
+        height: 30,
+        speed: 5,
+        dx: 0,
+        color: '#00fff5'
+    };
+
+    // 장애물 목록
+    let obstacles = [];
+    let obstacleTimer = 0;
+    let spawnRate = 40; // 프레임 단위 생성 주기
+
+    // 키보드 입력 처리
+    document.addEventListener('keydown', (e) => {
+        if (!isPlaying) return;
+        if (e.key === 'ArrowLeft' || e.key === 'Left') {
+            player.dx = -player.speed;
+        } else if (e.key === 'ArrowRight' || e.key === 'Right') {
+            player.dx = player.speed;
+        }
+    });
+
+    document.addEventListener('keyup', (e) => {
+        if (e.key === 'ArrowLeft' || e.key === 'Right' || e.key === 'ArrowRight' || e.key === 'Left') {
+            player.dx = 0;
+        }
+    });
+
+    function startGame() {
+        if (isPlaying) return;
+
+        // 초기화
+        score = 0;
+        obstacles = [];
+        player.x = canvas.width / 2 - 15;
+        player.dx = 0;
+        isGameOver = false;
+        isPlaying = true;
+        document.getElementById('scoreText').innerText = score;
+        document.getElementById('startBtn').innerText = '재시작';
+
+        // 게임 루프 실행 (60FPS 기준)
+        clearInterval(gameInterval);
+        gameInterval = setInterval(update, 1000 / 60);
+    }
+
+    function createObstacle() {
+        const size = Math.random() * 20 + 15; // 15px ~ 35px 크기
+        const x = Math.random() * (canvas.width - size);
+        const speed = Math.random() * 3 + 2 + (score * 0.05); // 점수가 높을수록 가속
+
+        obstacles.push({
+            x: x,
+            y: -size,
+            width: size,
+            height: size,
+            speed: speed,
+            color: '#e94560'
+        });
+    }
+
+    function update() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // 1. 플레이어 위치 업데이트
+        player.x += player.dx;
+
+        // 화면 밖으로 나가지 않도록 제한
+        if (player.x < 0) player.x = 0;
+        if (player.x + player.width > canvas.width) player.x = canvas.width - player.width;
+
+        // 플레이어 그리기 (픽셀 느낌의 사각형)
+        ctx.fillStyle = player.color;
+        ctx.fillRect(player.x, player.y, player.width, player.height);
+
+        // 2. 장애물 생성
+        obstacleTimer++;
+        if (obstacleTimer > spawnRate) {
+            createObstacle();
+            obstacleTimer = 0;
+        }
+
+        // 3. 장애물 이동 및 충돌 체크
+        for (let i = 0; i < obstacles.length; i++) {
+            let obs = obstacles[i];
+            obs.y += obs.speed;
+
+            // 장애물 그리기
+            ctx.fillStyle = obs.color;
+            ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
+
+            // 충돌 감지 (AABB 방식)
+            if (
+                player.x < obs.x + obs.width &&
+                player.x + player.width > obs.x &&
+                player.y < obs.y + obs.height &&
+                player.y + player.height > obs.y
+            ) {
+                gameOver();
+                return;
+            }
+
+            // 장애물이 화면 아래로 통과하면 점수 획득
+            if (obs.y > canvas.height) {
+                obstacles.splice(i, 1);
+                i--;
+                score += 10;
+                document.getElementById('scoreText').innerText = score;
+            }
+        }
+    }
+
+    function gameOver() {
+        isPlaying = false;
+        clearInterval(gameInterval);
+
+        if (score > highScore) {
+            highScore = score;
+            document.getElementById('highScoreText').innerText = highScore;
+        }
+
+        // 게임 오버 텍스트 출력
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        ctx.fillStyle = '#e94560';
+        ctx.font = 'bold 36px Courier New';
+        ctx.textAlign = 'center';
+        ctx.fillText('GAME OVER', canvas.width / 2, canvas.height / 2 - 10);
+
+        ctx.fillStyle = '#fff';
+        ctx.font = '18px Courier New';
+        ctx.fillText('최종 점수: ' + score, canvas.width / 2, canvas.height / 2 + 30);
+    }
+</script>
+</body>
+</html>
